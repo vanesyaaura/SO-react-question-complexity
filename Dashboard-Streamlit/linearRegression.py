@@ -27,14 +27,15 @@ choice = st.sidebar.radio("Go to", sections)
 @st.cache_data
 def load_data():
     try:
-        file_path = 'pengaruhReputasi.csv'
-        df = pd.read_csv(file_path)
+        df = pd.read_csv('pengaruhReputasi.csv')
         df = df.dropna()
         return df
     except FileNotFoundError:
-        st.error("CSV file not found. Please ensure 'pengaruhReputasi.csv' is in the directory.")
+        st.error("CSV file ''pengaruhReputasi.csv' was not found in the same directory. Make sure the file is in the correct location.")
         return pd.DataFrame()
-
+    except Exception as e:
+        st.error(f"Error reading CSV file: {e}")
+        return pd.DataFrame()
 df = load_data()
 
 if choice == "Data Overview":

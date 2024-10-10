@@ -38,11 +38,16 @@ choice = st.sidebar.radio("Go to", sections)
 
 @st.cache_data
 def load_data():
-    file_path = 'cleaned_output_addcolumns_final_merged_cleaned_questions.csv'
-    df = pd.read_csv(file_path)
-    df = df.dropna()
-    return df
-
+    try:
+        df = pd.read_csv('cleaned_output_addcolumns_final_merged_cleaned_questions.csv')
+        df = df.dropna()
+        return df
+    except FileNotFoundError:
+        st.error("CSV file ''cleaned_output_addcolumns_final_merged_cleaned_questions.csv' was not found in the same directory. Make sure the file is in the correct location.")
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Error reading CSV file: {e}")
+        return pd.DataFrame()
 df_clean = load_data()
 
 if choice == "Data Overview":
