@@ -24,7 +24,7 @@ st.sidebar.title("Navigation")
 sections = ["Data Overview", "Visualizations", "Machine Learning"]
 choice = st.sidebar.radio("Go to", sections)
 
-@st.cache_data
+@st.cache 
 def load_data():
     try:
         file_path = 'pengaruhReputasi.csv'
@@ -111,33 +111,3 @@ elif choice == "Machine Learning":
     st.subheader("Model Coefficients and Intercept")
     st.write(f"**Coefficient:** {regressor.coef_[0]:.4f}")
     st.write(f"**Intercept:** {regressor.intercept_:.4f}")
-    
-    st.subheader("Model Performance Metrics")
-    from sklearn.metrics import mean_squared_error, r2_score
-    
-    mse_train = mean_squared_error(y_train, y_pred_train)
-    mse_test = mean_squared_error(y_test, y_pred_test)
-    r2_train = r2_score(y_train, y_pred_train)
-    r2_test = r2_score(y_test, y_pred_test)
-    
-    st.write(f"**Training Set Mean Squared Error (MSE):** {mse_train:.4f}")
-    st.write(f"**Test Set Mean Squared Error (MSE):** {mse_test:.4f}")
-    st.write(f"**Training Set R-squared:** {r2_train:.4f}")
-    st.write(f"**Test Set R-squared:** {r2_test:.4f}")
-    
-    st.subheader("Residuals Plot (Test Set)")
-    residuals = y_test - y_pred_test
-    fig6, ax6 = plt.subplots(figsize=(8,6))
-    sns.scatterplot(x=y_pred_test, y=residuals, color='purple', ax=ax6)
-    ax6.axhline(0, color='red', linestyle='--')
-    ax6.set_title('Residuals Plot (Test Set)', fontsize=16)
-    ax6.set_xlabel('Predicted pd_score', fontsize=12)
-    ax6.set_ylabel('Residuals', fontsize=12)
-    st.pyplot(fig6)
-
-st.markdown("""
----
-**Developed by [Vanesya Aura ~ L200210170]**
-
-This dashboard visualizes data and builds a linear regression model to analyze the influence of Reputation on pd_score.
-""")
