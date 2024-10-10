@@ -27,34 +27,34 @@ choice = st.sidebar.radio("Go to", sections)
 @st.cache_data
 def load_data():
     try:
-        df = pd.read_csv('pengaruhReputasi.csv')
-        df = df.dropna()
-        return df
+        df_reputasi = pd.read_csv('./Dashboard-Streamlit/pengaruhReputasi.csv')
+        df_reputasi = df_reputasi.dropna()
+        return df_reputasi
     except FileNotFoundError:
         st.error("CSV file ''pengaruhReputasi.csv' was not found in the same directory. Make sure the file is in the correct location.")
         return pd.DataFrame()
     except Exception as e:
         st.error(f"Error reading CSV file: {e}")
         return pd.DataFrame()
-df = load_data()
+df_reputasi = load_data()
 
 if choice == "Data Overview":
     st.header("Dataset Overview")
     st.markdown("### Dataset Shape")
-    st.write(f"**Rows:** {df.shape[0]} | **Columns:** {df.shape[1]}")
+    st.write(f"**Rows:** {df_reputasi.shape[0]} | **Columns:** {df_reputasi.shape[1]}")
     
     st.markdown("### Columns in Dataset")
-    st.write(list(df.columns))
+    st.write(list(df_reputasi.columns))
     
     st.markdown("### Sample Data")
-    st.dataframe(df.head())
+    st.dataframe(df_reputasi.head())
 
 elif choice == "Visualizations":
     st.header("Data Visualizations")
     
     st.subheader("pd_score Distribution Plot")
     fig1, ax1 = plt.subplots(figsize=(8, 6))
-    sns.histplot(df['pd_score'], kde=True, color='skyblue', ax=ax1)
+    sns.histplot(df_reputasi['pd_score'], kde=True, color='skyblue', ax=ax1)
     ax1.set_title('pd_score Distribution Plot', fontsize=16)
     ax1.set_xlabel('pd_score', fontsize=12)
     ax1.set_ylabel('Frequency', fontsize=12)
@@ -62,7 +62,7 @@ elif choice == "Visualizations":
     
     st.subheader("Reputation vs pd_score Scatter Plot")
     fig2, ax2 = plt.subplots(figsize=(8, 6))
-    sns.scatterplot(x='Reputation', y='pd_score', data=df, color='blue', ax=ax2)
+    sns.scatterplot(x='Reputation', y='pd_score', data=df_reputasi, color='blue', ax=ax2)
     ax2.set_title('Reputation vs pd_score', fontsize=16)
     ax2.set_xlabel('Reputation', fontsize=12)
     ax2.set_ylabel('pd_score', fontsize=12)
@@ -70,7 +70,7 @@ elif choice == "Visualizations":
     
     st.subheader("pd_score Box Plot")
     fig3, ax3 = plt.subplots(figsize=(8, 6))
-    sns.boxplot(y='pd_score', data=df, color='lightgreen', ax=ax3)
+    sns.boxplot(y='pd_score', data=df_reputasi, color='lightgreen', ax=ax3)
     ax3.set_title('pd_score Box Plot', fontsize=16)
     ax3.set_ylabel('pd_score', fontsize=12)
     st.pyplot(fig3)
@@ -78,8 +78,8 @@ elif choice == "Visualizations":
 elif choice == "Machine Learning":
     st.header("Machine Learning Model")
     
-    X = df[['Reputation']]
-    y = df['pd_score']  
+    X = df_reputasi[['Reputation']]
+    y = df_reputasi['pd_score']  
     
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
     
