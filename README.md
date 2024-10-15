@@ -1,5 +1,5 @@
 # Research Artifacts: 
-## What Influences the Answerability of React Questions? An Empirical Comparative Study of Answered and Unanswered Questions on Stack Overflow.
+## Empirical Study of React Question Complexity on Stack Overflow: A Comparative Analysis Between Answered and Unanswered Questions.
 
 Repo ini berisi script code python untuk melakukan analisis dalam menentukan variable yang mempengaruhi suatu pertanyaan terkait React dapat terjawab di platform diskusi Stack Overflow.
 Skripsi berjudul "Empirical Study of React Question Complexity on Stack Overflow: A Comparative Analysis Between Answered and Unanswered Questions" dikembangkan sejak tanggal 11 September 2024.
