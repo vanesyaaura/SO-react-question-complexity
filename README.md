@@ -5,3 +5,13 @@ Repo ini berisi script code python untuk melakukan analisis dalam menentukan var
 Skripsi berjudul "Empirical Study of React Question Complexity on Stack Overflow: A Comparative Analysis Between Answered and Unanswered Questions" dikembangkan sejak tanggal 11 September 2024.
 Terus berusaha, semoga selalu diberi kemudahan.
 ~ (Vanesya Aura Ardity/L200210170)
+
+### Requirements:
+- streamlit
+- pandas
+- numpy
+- scikit-learn
+- seaborn
+- matplotlib
+- imblearn
+- statsmodels
