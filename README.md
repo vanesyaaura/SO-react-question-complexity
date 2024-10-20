@@ -7,11 +7,12 @@ Terus berusaha, semoga selalu diberi kemudahan.
 ~ (Vanesya Aura Ardity/L200210170)
 
 ### Requirements:
-- streamlit
-- pandas
-- numpy
-- scikit-learn
-- seaborn
-- matplotlib
-- imblearn
-- statsmodels
+
+- [streamlit](https://streamlit.io/)
+- [pandas](https://pandas.pydata.org/)
+- [numpy](https://numpy.org/)
+- [scikit-learn](https://scikit-learn.org/)
+- [seaborn](https://seaborn.pydata.org/)
+- [matplotlib](https://matplotlib.org/)
+- [imblearn](https://imbalanced-learn.org/stable/)
+- [statsmodels](https://www.statsmodels.org/)
