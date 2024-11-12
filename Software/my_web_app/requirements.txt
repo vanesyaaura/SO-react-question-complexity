@@ -1,0 +1,9 @@
+flask
+statsmodels
+scikit-learn
+matplotlib
+request
+bs4
+py7zr
+nltk
+pytest
