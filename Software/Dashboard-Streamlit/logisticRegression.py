@@ -39,7 +39,7 @@ choice = st.sidebar.radio("Go to", sections)
 @st.cache_data
 def load_data():
     try:
-        df_clean = pd.read_csv('./Dashboard-Streamlit/cleaned_output_addcolumns_final_merged_cleaned_questions.csv')
+        df_clean = pd.read_csv('./Software/Dashboard-Streamlit/cleaned_output_addcolumns_final_merged_cleaned_questions.csv')
         df_clean = df_clean.dropna()
         return df_clean
     except FileNotFoundError:

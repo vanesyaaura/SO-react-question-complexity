@@ -27,7 +27,7 @@ choice = st.sidebar.radio("Go to", sections)
 @st.cache_data
 def load_data():
     try:
-        df_reputasi = pd.read_csv('./Dashboard-Streamlit/pengaruhReputasi.csv')
+        df_reputasi = pd.read_csv('./Software/Dashboard-Streamlit/pengaruhReputasi.csv')
         df_reputasi = df_reputasi.dropna()
         return df_reputasi
     except FileNotFoundError:
