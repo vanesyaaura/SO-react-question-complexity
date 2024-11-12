@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error, r2_score
 
 st.set_page_config(page_title="Reputation vs pd_score Analysis Dashboard", layout="wide")
 
@@ -29,16 +28,14 @@ choice = st.sidebar.radio("Go to", sections)
 def load_data():
     try:
         df_reputasi = pd.read_csv('./Software/Dashboard-Streamlit/pengaruhReputasi.csv')
-        df_reputasi.columns = df_reputasi.columns.str.strip()
         df_reputasi = df_reputasi.dropna()
         return df_reputasi
     except FileNotFoundError:
-        st.error("CSV file 'pengaruhReputasi.csv' was not found in the specified directory. Make sure the file is in the correct location.")
+        st.error("CSV file ''pengaruhReputasi.csv' was not found in the same directory. Make sure the file is in the correct location.")
         return pd.DataFrame()
     except Exception as e:
         st.error(f"Error reading CSV file: {e}")
         return pd.DataFrame()
-
 df_reputasi = load_data()
 
 if choice == "Data Overview":
@@ -117,6 +114,8 @@ elif choice == "Machine Learning":
     st.write(f"**Intercept:** {regressor.intercept_:.4f}")
     
     st.subheader("Model Performance Metrics")
+    from sklearn.metrics import mean_squared_error, r2_score
+    
     mse_train = mean_squared_error(y_train, y_pred_train)
     mse_test = mean_squared_error(y_test, y_pred_test)
     r2_train = r2_score(y_train, y_pred_train)
