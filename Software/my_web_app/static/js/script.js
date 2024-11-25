@@ -1,4 +1,94 @@
 let crawlingInProgress = false;
+let isPaused = false;
+let statusCheckInterval = null;
+
+function updateButtonStates(isRunning) {
+    document.getElementById('crawl-btn').disabled = isRunning;
+    document.getElementById('control-buttons').style.display = isRunning ? 'flex' : 'none';
+}
+
+function updateProgress(progress, currentFile) {
+    const progressContainer = document.getElementById('progress-container');
+    const progressBar = document.getElementById('progress-bar');
+    const statusDiv = document.getElementById('crawl-status');
+    
+    progressContainer.style.display = 'block';
+    progressBar.style.width = `${progress}%`;
+    progressBar.textContent = `${Math.round(progress)}%`;
+    
+    if (currentFile) {
+        statusDiv.innerHTML = `<div class="alert alert-info">Processing: ${currentFile}</div>`;
+    }
+}
+
+function checkCrawlStatus() {
+    fetch('/crawl_status')
+        .then(response => response.json())
+        .then(status => {
+            crawlingInProgress = status.is_running;
+            isPaused = status.is_paused;
+            updateButtonStates(status.is_running);
+            updatePauseResumeButton();
+            
+            if (status.is_running) {
+                updateProgress(status.progress, status.current_file);
+            } else {
+                clearInterval(statusCheckInterval);
+                document.getElementById('progress-container').style.display = 'none';
+                if (!status.is_paused) {
+                    document.getElementById('crawl-status').innerHTML = 
+                        '<div class="alert alert-success">Crawling completed successfully!</div>';
+                    document.getElementById('control-buttons').style.display = 'none';
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error checking status:', error);
+            clearInterval(statusCheckInterval);
+        });
+}
+
+function updatePauseResumeButton() {
+    const button = document.getElementById('pause-resume-btn');
+    const icon = document.getElementById('pause-resume-icon');
+    const text = document.getElementById('pause-resume-text');
+    
+    if (isPaused) {
+        button.classList.remove('btn-warning');
+        button.classList.add('btn-success');
+        icon.src = 'static/images/resume.png';
+        icon.alt = 'Resume';
+        text.textContent = 'Resume';
+    } else {
+        button.classList.remove('btn-success');
+        button.classList.add('btn-warning');
+        icon.src = 'static/images/pause.png';
+        icon.alt = 'Pause';
+        text.textContent = 'Pause';
+    }
+}
+
+function togglePauseResume() {
+    const action = isPaused ? 'resume_crawl' : 'pause_crawl';
+    
+    fetch(`/${action}`, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            isPaused = !isPaused;
+            updatePauseResumeButton();
+            
+            document.getElementById('crawl-status').innerHTML = 
+                `<div class="alert alert-info">Crawling ${isPaused ? 'paused' : 'resumed'}</div>`;
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('crawl-status').innerHTML = 
+                `<div class="alert alert-danger">Error: ${error.message}</div>`;
+        });
+}
 
 function crawlData() {
     if (crawlingInProgress) {
@@ -7,23 +97,58 @@ function crawlData() {
     }
 
     const statusDiv = document.getElementById('crawl-status');
-    statusDiv.innerHTML = '<div class="alert alert-info">Crawling data... Please wait.</div>';
-    crawlingInProgress = true;
-
+    statusDiv.innerHTML = '<div class="alert alert-info">Starting crawl process...</div>';
+    
     fetch('/crawl', {
         method: 'POST'
     })
     .then(response => response.json())
     .then(data => {
-        statusDiv.innerHTML = '<div class="alert alert-success">Data crawling started. This may take several minutes...</div>';
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        statusDiv.innerHTML = '<div class="alert alert-info">Data crawling started...</div>';
+        crawlingInProgress = true;
+        isPaused = false;
+        updateButtonStates(true);
+        updatePauseResumeButton();
+        
+        if (statusCheckInterval) {
+            clearInterval(statusCheckInterval);
+        }
+        statusCheckInterval = setInterval(checkCrawlStatus, 1000);
     })
     .catch(error => {
-        statusDiv.innerHTML = '<div class="alert alert-danger">Error during data crawling. Please try again.</div>';
+        statusDiv.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
         console.error('Error:', error);
-    })
-    .finally(() => {
-        crawlingInProgress = false;
     });
+}
+
+function stopCrawl() {
+    if (!confirm('Are you sure you want to stop the crawling process? This cannot be undone.')) {
+        return;
+    }
+
+    fetch('/stop_crawl', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            document.getElementById('crawl-status').innerHTML = 
+                '<div class="alert alert-info">Crawling stopped</div>';
+            crawlingInProgress = false;
+            isPaused = false;
+            updateButtonStates(false);
+            clearInterval(statusCheckInterval);
+            document.getElementById('progress-container').style.display = 'none';
+            document.getElementById('control-buttons').style.display = 'none';
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('crawl-status').innerHTML = 
+                `<div class="alert alert-danger">Error: ${error.message}</div>`;
+        });
 }
 
 let analysisInProgress = false;
@@ -97,3 +222,9 @@ function startAnalysis() {
         analysisInProgress = false;
     });
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    updateButtonStates(false, false);
+    
+    document.getElementById('progress-container').style.display = 'none';
+});

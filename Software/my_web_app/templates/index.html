@@ -9,17 +9,34 @@
 </head>
 <body>
     <header>
-        <img src="static/images/logo.jpg" alt="Logo" id="logo">
+        <img src="static/images/logo.png" alt="Logo" id="logo">
         <h1>StackOverflow Data Analysis</h1>
-        <p>Welcome to the statistical analysis app! I'm Vansmoroll, and here you can perform linear and logistic regression analysis with data from StackOverflow. This app uses machine learning techniques and interactive visualizations to help you understand and analyze your data. Let's start analyzing your data now!</p>
+        <p>Welcome to the statistical analysis app! Here you can perform 
+            linear and logistic regression analysis with data from StackOverflow. 
+            This app uses machine learning techniques and interactive visualizations 
+            to help you understand and analyze data. Let's start analyzing data now!</p>
     </header>
-    
+
     <div class="main-container">
         <div class="card">
             <div class="card-body">
                 <h2>Data Collection</h2>
-                <button onclick="crawlData()" class="btn btn-primary mb-4">Crawl StackOverflow Data</button>
-                <div id="crawl-status"></div>
+                <div class="crawl-controls">
+                    <button onclick="crawlData()" class="btn btn-primary" id="crawl-btn">Crawl StackOverflow Data</button>
+                    <div id="control-buttons" style="display: none;">
+                        <button onclick="togglePauseResume()" class="btn btn-warning" id="pause-resume-btn">
+                            <img src="static/images/pause.png" alt="Pause" class="btn-icon" id="pause-resume-icon"> 
+                            <span id="pause-resume-text">Pause</span>
+                        </button>
+                        <button onclick="stopCrawl()" class="btn btn-danger" id="stop-btn">
+                            <img src="static/images/stop.png" alt="Stop" class="btn-icon"> Stop
+                        </button>
+                    </div>
+                </div>
+                <div class="progress mt-3" style="display: none;" id="progress-container">
+                    <div class="progress-bar" role="progressbar" style="width: 0%;" id="progress-bar">0%</div>
+                </div>
+                <div id="crawl-status" class="mt-3"></div>
             </div>
         </div>
 
@@ -46,7 +63,7 @@
             <div id="coef-table"></div>
         </div>
     </div>
-    
+
     <footer>
         <p>&copy; 2024 Vanesya Aura Ardity - StackOverflow Data Analysis</p>
     </footer>
