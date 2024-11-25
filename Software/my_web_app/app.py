@@ -50,7 +50,6 @@ except LookupError:
     nltk.download('wordnet')
 
 def create_linear_regression_plot(X, y, X_train, y_train, regressor):
-    """Helper function untuk membuat plot regresi linear"""
     plt.figure(figsize=(10, 6))
     plt.scatter(X, y, color='lightcoral')
     plt.plot(X_train, regressor.predict(X_train), color='firebrick')
@@ -68,12 +67,10 @@ def create_linear_regression_plot(X, y, X_train, y_train, regressor):
     return f'data:image/png;base64,{image_base64}'
 
 def get_file_size(url):
-    """Get file size before downloading"""
     response = requests.head(url)
     return int(response.headers.get('content-length', 0))
 
 def download_file(url, file_path):
-    """Enhanced download function with progress tracking"""
     global crawl_status
     
     response = requests.get(url, stream=True)
@@ -183,6 +180,48 @@ def get_crawl_status():
     with crawl_lock:
         return jsonify(crawl_status)
 
+@app.route('/upload_dataset', methods=['POST'])
+def upload_dataset():
+    if 'file1' not in request.files or 'file2' not in request.files:
+        return jsonify({"error": "Both datasets are required"}), 400
+
+    file1 = request.files['file1']
+    file2 = request.files['file2']
+
+    if file1.filename == '' or file2.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    try:
+        os.makedirs('data/stackoverflow', exist_ok=True)
+
+        df1_path = os.path.join('data/stackoverflow', 'logisticRegression.csv')
+        file1.save(df1_path)
+        df1 = pd.read_csv(df1_path)
+
+        required_cols1 = [
+            'Id', 'CommentCount', 'ViewCount', 'Tags', 'code_snippet', 
+            'question_line_count', 'code_line_count', 'image', 
+            'pd_score', 'Reputation', 'ReputationCategory', 'answered?'
+        ]
+        if not all(col in df1.columns for col in required_cols1):
+            os.remove(df1_path)
+            return jsonify({"error": "First dataset does not have required columns"}), 400
+
+        df2_path = os.path.join('data/stackoverflow', 'linearRegression.csv')
+        file2.save(df2_path)
+        df2 = pd.read_csv(df2_path)
+
+        required_cols2 = ['Reputation', 'pd_score']
+        if not all(col in df2.columns for col in required_cols2):
+            os.remove(df1_path)
+            os.remove(df2_path)
+            return jsonify({"error": "Second dataset does not have required columns"}), 400
+
+        return jsonify({"message": "Datasets uploaded successfully"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/analyze', methods=['POST'])
 def analyze():
     data = request.json
@@ -190,7 +229,7 @@ def analyze():
 
     if analysis_type == "linear_regression":
         try:
-            merged_df = pd.read_csv('data/stackoverflow/cleaned_output_addcolumns_final_merged_cleaned_questions.csv')
+            merged_df = pd.read_csv('data/stackoverflow/linearRegression.csv')
             
             merged_df['pd_score'] = pd.to_numeric(merged_df['pd_score'], errors='coerce')
             merged_df = merged_df.dropna(subset=['Reputation', 'pd_score'])
@@ -221,7 +260,7 @@ def analyze():
 
     elif analysis_type == "logistic_regression":
         try:
-            merged_df = pd.read_csv('data/stackoverflow/cleaned_output_addcolumns_final_merged_cleaned_questions.csv')
+            merged_df = pd.read_csv('data/stackoverflow/logisticRegression.csv')
             
             merged_df['log_Reputation'] = np.log1p(merged_df['Reputation'])
             merged_df['sqrt_question_line_count'] = np.sqrt(merged_df['question_line_count'])

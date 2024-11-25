@@ -153,6 +153,39 @@ function stopCrawl() {
 
 let analysisInProgress = false;
 
+function uploadDatasets() {
+    const file1 = document.getElementById('datasetInput1').files[0];
+    const file2 = document.getElementById('datasetInput2').files[0];
+    const uploadStatus = document.getElementById('upload-status');
+
+    if (!file1 || !file2) {
+        uploadStatus.innerHTML = '<div class="alert alert-danger">Please select both datasets</div>';
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file1', file1);
+    formData.append('file2', file2);
+
+    uploadStatus.innerHTML = '<div class="alert alert-info">Uploading datasets...</div>';
+
+    fetch('/upload_dataset', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        uploadStatus.innerHTML = '<div class="alert alert-success">Datasets uploaded successfully!</div>';
+    })
+    .catch(error => {
+        uploadStatus.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+        console.error('Error:', error);
+    });
+}
+
 function startAnalysis() {
     if (analysisInProgress) {
         alert('Analysis is already in progress. Please wait.');
