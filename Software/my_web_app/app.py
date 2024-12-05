@@ -25,9 +25,9 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 from imblearn.over_sampling import SMOTE
 import seaborn as sns
+import concurrent.futures
 
 app = Flask(__name__)
-executor = ThreadPoolExecutor(max_workers=3)
 
 crawl_status = {
     'is_running': False,
@@ -37,7 +37,6 @@ crawl_status = {
     'total_size': 0,
     'downloaded_size': 0
 }
-
 crawl_lock = threading.Lock()
 
 try:
@@ -67,85 +66,184 @@ def create_linear_regression_plot(X, y, X_train, y_train, regressor):
     return f'data:image/png;base64,{image_base64}'
 
 def get_file_size(url):
-    response = requests.head(url)
-    return int(response.headers.get('content-length', 0))
+    try:
+        with requests.head(url) as response:
+            return int(response.headers.get('Content-Length', 0))
+    except:
+        return 0
 
 def download_file(url, file_path):
-    global crawl_status
-    
-    response = requests.get(url, stream=True)
-    total_size = int(response.headers.get('content-length', 0))
-    block_size = 8192
-    downloaded_size = 0
+    try:
+        with requests.get(url, stream=True) as response:
+            response.raise_for_status()
+            total_size = int(response.headers.get('Content-Length', 0))
+            downloaded_size = 0
+            with open(file_path, 'wb') as file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    with crawl_lock:
+                        if not crawl_status['is_running']:
+                            return False
+                        
+                        while crawl_status['is_paused']:
+                            time.sleep(1)
+                            if not crawl_status['is_running']:
+                                return False
 
-    with open(file_path, 'wb') as f:
-        for chunk in response.iter_content(chunk_size=block_size):
-            if chunk:
-                while crawl_status['is_paused']:
-                    time.sleep(1)
-                    if not crawl_status['is_running']:
-                        return False
-                
-                if not crawl_status['is_running']:
-                    return False
-                
-                f.write(chunk)
-                downloaded_size += len(chunk)
-                with crawl_lock:
-                    crawl_status['downloaded_size'] = downloaded_size
-                    crawl_status['progress'] = (downloaded_size / total_size) * 100
-    
-    return True
+                    if chunk:
+                        file.write(chunk)
+                        downloaded_size += len(chunk)
+                        with crawl_lock:
+                            crawl_status['downloaded_size'] = downloaded_size
+                            crawl_status['progress'] = (downloaded_size / total_size) * 100 if total_size > 0 else 0
+        return True
+    except Exception as e:
+        print(f"Download error: {e}")
+        return False
+
+executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
 @app.route('/')
 def home():
     return render_template('index.html')
 
-@app.route('/crawl', methods=['POST'])
-def crawl_data():
+def async_crawl(base_url, files_to_download, tags):
     global crawl_status
     
-    with crawl_lock:
-        if crawl_status['is_running']:
-            return jsonify({"error": "Crawling is already in progress"}), 400
-        crawl_status['is_running'] = True
-        crawl_status['is_paused'] = False
-        crawl_status['progress'] = 0
-        crawl_status['current_file'] = ''
-        crawl_status['total_size'] = 0
-        crawl_status['downloaded_size'] = 0
-
-    def async_crawl():
-        global crawl_status
-        base_url = "https://archive.org/download/stackexchange"
-        files_to_download = ['stackoverflow.com-Posts.7z', 'stackoverflow.com-Users.7z']
+    try:
+        os.makedirs('data/extracted', exist_ok=True)
         
-        try:
-            os.makedirs('data', exist_ok=True)
-            
-            for file in files_to_download:
+        for file in files_to_download:
+            with crawl_lock:
                 if not crawl_status['is_running']:
                     break
-                    
-                with crawl_lock:
-                    crawl_status['current_file'] = file
-                    crawl_status['progress'] = 0
-                    crawl_status['downloaded_size'] = 0
-                    crawl_status['total_size'] = get_file_size(f"{base_url}/{file}")
                 
-                file_path = f"data/{file}"
-                if download_file(f"{base_url}/{file}", file_path):
-                    if crawl_status['is_running']:
-                        with py7zr.SevenZipFile(file_path, mode='r') as z:
-                            z.extractall(path='data/extracted')
-        
-        finally:
+                while crawl_status['is_paused']:
+                    time.sleep(1)
+                    if not crawl_status['is_running']:
+                        return
+            
             with crawl_lock:
-                crawl_status['is_running'] = False
-                crawl_status['is_paused'] = False
+                crawl_status['current_file'] = file
+                crawl_status['progress'] = 0
+                crawl_status['downloaded_size'] = 0
+                crawl_status['total_size'] = get_file_size(f"{base_url}/{file}")
+            
+            file_path = f"data/extracted/{file}"
+            
+            if download_file(f"{base_url}/{file}", file_path):
+                if crawl_status['is_running']:
+                    with py7zr.SevenZipFile(file_path, mode='r') as z:
+                        z.extractall(path='data/extracted')
     
-    executor.submit(async_crawl)
-    return jsonify({"message": "Data crawling started"})
+    except Exception as e:
+        print(f"Crawling error: {e}")
+    
+    finally:
+        with crawl_lock:
+            crawl_status['is_running'] = False
+            crawl_status['is_paused'] = False
+            crawl_status['current_file'] = ''
+            crawl_status['progress'] = 0
+
+@app.route('/crawl', methods=['POST'])
+def crawl():
+    data = request.json
+    base_url = data.get('base_url')
+    files_to_download = data.get('files_to_download')
+    tags = data.get('tags', [])
+    if isinstance(tags, str):
+        tags = [tag.strip() for tag in tags.split(',')]
+
+    if not base_url or not files_to_download:
+        return jsonify({"error": "Base URL and files to download are required"}), 400
+
+    try:
+        os.makedirs('data', exist_ok=True)
+        logistic_path, linear_path = generate_datasets(base_url, files_to_download, tags)
+        return jsonify({
+            "message": "Data crawling completed",
+            "logistic_regression_dataset": logistic_path,
+            "linear_regression_dataset": linear_path
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+def process_data(base_url, files_to_download, tags):
+    os.makedirs('data/extracted', exist_ok=True)
+    
+    crawl_status['is_running'] = True
+    async_crawl(base_url, files_to_download, tags)
+    
+    posts_file_path = 'data/extracted/cleaned_questions_final.csv'
+    users_split_path = 'data/extracted/users_split'
+
+    if not os.path.exists(posts_file_path):
+        raise FileNotFoundError(f"Posts file not found at {posts_file_path}")
+    
+    if not os.path.exists(users_split_path) or not os.listdir(users_split_path):
+        raise FileNotFoundError(f"Users split files not found in {users_split_path}")
+
+    df = pd.read_csv(posts_file_path)
+    
+    df['code_snippet'] = df['Body'].apply(lambda x: 1 if re.search(r'<code>.?</code>', str(x), re.DOTALL) else 0)
+    df['question_line_count'] = df['Body'].apply(lambda x: len(str(x).splitlines()))
+    df['code_line_count'] = df['Body'].apply(lambda x: sum(len(code_block.splitlines()) for code_block in re.findall(r'<code>(.?)</code>', str(x), re.DOTALL)))
+    df['image'] = df['Body'].apply(lambda x: 1 if re.search(r'<img\s+[^>]*src=', str(x)) else 0)
+    
+    df['AnswerCount'] = pd.to_numeric(df['AnswerCount'], errors='coerce').fillna(0)
+    df['ViewCount'] = pd.to_numeric(df['ViewCount'], errors='coerce').fillna(0)
+    df['pd_score'] = (df['AnswerCount'] / df['ViewCount']) * 100
+
+    user_files = [os.path.join(users_split_path, f) for f in os.listdir(users_split_path) if f.endswith('.csv')]
+    list_of_user_dfs = [pd.read_csv(file) for file in user_files]
+    users_df = pd.concat(list_of_user_dfs, ignore_index=True)
+    users_df.rename(columns={'Id': 'OwnerUserId'}, inplace=True)
+    
+    merged_df = pd.merge(df, users_df[['OwnerUserId', 'Reputation']], on='OwnerUserId', how='left')
+
+    def categorize_reputation(reputation):
+        if reputation >= 2400:
+            return 'High'
+        elif 400 <= reputation < 2400:
+            return 'Mid'
+        elif 1 < reputation < 400:
+            return 'Low'
+        else:
+            return None
+
+    merged_df['ReputationCategory'] = merged_df['Reputation'].apply(categorize_reputation)
+    merged_df['answered?'] = merged_df['AnswerCount'].apply(lambda x: 1 if x > 0 else 0)
+
+    columns_to_drop = ['PostTypeId', 'AcceptedAnswerId', 'OwnerUserId', 'AnswerCount',
+                       'FavoriteCount', 'CommunityOwnedDate', 'CreationDate', 'Score', 'Title', 'Body']
+    merged_df.drop(columns=columns_to_drop, inplace=True)
+
+    merged_df['Reputation'] = pd.to_numeric(merged_df['Reputation'], errors='coerce')
+    merged_df = merged_df[merged_df['Reputation'] > 0].dropna(subset=['Reputation', 'ReputationCategory'])
+
+    if tags and isinstance(tags, list) and tags[0]:
+        merged_df = merged_df[merged_df['Tags'].str.contains('|'.join(tags), na=False)]
+
+    return merged_df
+
+def generate_datasets(base_url, files_to_download, tags):
+    os.makedirs('data/stackoverflow', exist_ok=True)
+
+    merged_df = process_data(base_url, files_to_download, tags)
+
+    logistic_regression_df = merged_df[['Id', 'CommentCount', 'ViewCount', 'Tags', 
+                                        'code_snippet', 'question_line_count', 
+                                        'code_line_count', 'image', 'pd_score', 
+                                        'Reputation', 'ReputationCategory', 'answered?']]
+
+    logistic_regression_path = 'data/stackoverflow/logisticRegression.csv'
+    logistic_regression_df.to_csv(logistic_regression_path, index=False)
+
+    linear_regression_df = merged_df[['Reputation', 'pd_score']]
+    linear_regression_path = 'data/stackoverflow/linearRegression.csv'
+    linear_regression_df.to_csv(linear_regression_path, index=False)
+
+    return logistic_regression_path, linear_regression_path
 
 @app.route('/pause_crawl', methods=['POST'])
 def pause_crawl():
@@ -153,17 +251,31 @@ def pause_crawl():
     with crawl_lock:
         if crawl_status['is_running']:
             crawl_status['is_paused'] = True
-            return jsonify({"message": "Crawling paused"})
+            return jsonify({
+                "message": "Crawling paused", 
+                "status": {
+                    "is_paused": True, 
+                    "current_file": crawl_status['current_file'], 
+                    "progress": crawl_status['progress']
+                }
+            })
     return jsonify({"error": "No crawling in progress"}), 400
 
 @app.route('/resume_crawl', methods=['POST'])
 def resume_crawl():
     global crawl_status
     with crawl_lock:
-        if crawl_status['is_running']:
+        if crawl_status['is_running'] and crawl_status['is_paused']:
             crawl_status['is_paused'] = False
-            return jsonify({"message": "Crawling resumed"})
-    return jsonify({"error": "No crawling in progress"}), 400
+            return jsonify({
+                "message": "Crawling resumed", 
+                "status": {
+                    "is_paused": False, 
+                    "current_file": crawl_status['current_file'], 
+                    "progress": crawl_status['progress']
+                }
+            })
+    return jsonify({"error": "No paused crawling in progress"}), 400
 
 @app.route('/stop_crawl', methods=['POST'])
 def stop_crawl():
@@ -220,7 +332,7 @@ def upload_dataset():
         return jsonify({"message": "Datasets uploaded successfully"}), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e)}), 
 
 @app.route('/analyze', methods=['POST'])
 def analyze():

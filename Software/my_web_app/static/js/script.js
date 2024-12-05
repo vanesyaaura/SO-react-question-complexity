@@ -5,6 +5,8 @@ let statusCheckInterval = null;
 function updateButtonStates(isRunning) {
     document.getElementById('crawl-btn').disabled = isRunning;
     document.getElementById('control-buttons').style.display = isRunning ? 'flex' : 'none';
+    document.getElementById('pause-resume-btn').disabled = !isRunning;
+    document.getElementById('stop-btn').disabled = !isRunning;
 }
 
 function updateProgress(progress, currentFile) {
@@ -17,7 +19,12 @@ function updateProgress(progress, currentFile) {
     progressBar.textContent = `${Math.round(progress)}%`;
     
     if (currentFile) {
-        statusDiv.innerHTML = `<div class="alert alert-info">Processing: ${currentFile}</div>`;
+        statusDiv.innerHTML = `
+            <div class="alert alert-info">
+                Processing: ${currentFile} 
+                ${isPaused ? '(Paused)' : ''}
+            </div>
+        `;
     }
 }
 
@@ -27,16 +34,27 @@ function checkCrawlStatus() {
         .then(status => {
             crawlingInProgress = status.is_running;
             isPaused = status.is_paused;
-            updateButtonStates(status.is_running);
+            
+            updateButtonStates(crawlingInProgress);
             updatePauseResumeButton();
             
-            if (status.is_running) {
+            if (crawlingInProgress) {
                 updateProgress(status.progress, status.current_file);
+                
+                if (!statusCheckInterval) {
+                    statusCheckInterval = setInterval(checkCrawlStatus, 1000);
+                }
             } else {
-                clearInterval(statusCheckInterval);
+                if (statusCheckInterval) {
+                    clearInterval(statusCheckInterval);
+                    statusCheckInterval = null;
+                }
+                
                 document.getElementById('progress-container').style.display = 'none';
+                
+                const statusDiv = document.getElementById('crawl-status');
                 if (!status.is_paused) {
-                    document.getElementById('crawl-status').innerHTML = 
+                    statusDiv.innerHTML = 
                         '<div class="alert alert-success">Crawling completed successfully!</div>';
                     document.getElementById('control-buttons').style.display = 'none';
                 }
@@ -44,7 +62,15 @@ function checkCrawlStatus() {
         })
         .catch(error => {
             console.error('Error checking status:', error);
-            clearInterval(statusCheckInterval);
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+                statusCheckInterval = null;
+            }
+            
+            updateButtonStates(false);
+            document.getElementById('progress-container').style.display = 'none';
+            document.getElementById('crawl-status').innerHTML = 
+                '<div class="alert alert-danger">Connection lost. Please restart crawling.</div>';
         });
 }
 
@@ -77,11 +103,16 @@ function togglePauseResume() {
             if (data.error) {
                 throw new Error(data.error);
             }
-            isPaused = !isPaused;
+            
+            isPaused = action === 'pause_crawl';
             updatePauseResumeButton();
             
             document.getElementById('crawl-status').innerHTML = 
                 `<div class="alert alert-info">Crawling ${isPaused ? 'paused' : 'resumed'}</div>`;
+            
+            if (!isPaused && !statusCheckInterval) {
+                statusCheckInterval = setInterval(checkCrawlStatus, 1000);
+            }
         })
         .catch(error => {
             console.error('Error:', error);
@@ -91,6 +122,23 @@ function togglePauseResume() {
 }
 
 function crawlData() {
+    const baseUrl = document.getElementById('base-url').value.trim();
+    const filesToDownload = document.getElementById('files-to-download').value.trim();
+    const tags = document.getElementById('tags').value.trim();
+
+    if (!baseUrl) {
+        alert('Please enter a base URL');
+        return;
+    }
+
+    if (!filesToDownload) {
+        alert('Please enter files to download');
+        return;
+    }
+
+    const fileList = filesToDownload.split(',').map(file => file.trim());
+    const tagList = tags ? tags.split(',').map(tag => tag.trim()) : [];
+
     if (crawlingInProgress) {
         alert('Crawling is already in progress. Please wait.');
         return;
@@ -100,7 +148,15 @@ function crawlData() {
     statusDiv.innerHTML = '<div class="alert alert-info">Starting crawl process...</div>';
     
     fetch('/crawl', {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            base_url: baseUrl,
+            files_to_download: fileList,
+            tags: tagList
+        })
     })
     .then(response => response.json())
     .then(data => {
@@ -140,7 +196,12 @@ function stopCrawl() {
             crawlingInProgress = false;
             isPaused = false;
             updateButtonStates(false);
-            clearInterval(statusCheckInterval);
+            
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+                statusCheckInterval = null;
+            }
+            
             document.getElementById('progress-container').style.display = 'none';
             document.getElementById('control-buttons').style.display = 'none';
         })
@@ -257,7 +318,7 @@ function startAnalysis() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    updateButtonStates(false, false);
-    
+    updateButtonStates(false);
     document.getElementById('progress-container').style.display = 'none';
+    document.getElementById('control-buttons').style.display = 'none';
 });

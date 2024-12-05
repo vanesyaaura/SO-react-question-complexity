@@ -9,7 +9,6 @@
 </head>
 <body>
     <header>
-        <img src="static/images/logo.png" alt="Logo" id="logo">
         <h1>StackOverflow Data Analysis</h1>
         <p>Welcome to the StackOverflow Data Analysis App - a powerful tool 
             for analyzing programming-related datasets. This application 
@@ -29,16 +28,23 @@
         <div class="card">
             <div class="card-body">
                 <h2>Data Collection</h2>
+                <div class="input-group mb-3">
+                    <input type="text" id="base-url" class="form-control" placeholder="Enter Base URL (e.g., https://archive.org/download/stackexchange)">
+                </div>
+                <div class="input-group mb-3">
+                    <input type="text" id="files-to-download" class="form-control" placeholder="Enter Files to Download (comma-separated)">
+                </div>
+                <div class="input-group mb-3">
+                    <input type="text" id="tags" class="form-control" placeholder="Enter Tags (comma-separated)">
+                </div>
                 <div class="crawl-controls">
-                    <button onclick="crawlData()" class="btn btn-primary" id="crawl-btn">Crawl StackOverflow Data</button>
+                    <button onclick="crawlData()" class="btn btn-primary" id="crawl-btn">Crawl Data</button>
                     <div id="control-buttons" style="display: none;">
-                        <button onclick="togglePauseResume()" class="btn btn-warning" id="pause-resume-btn">
-                            <img src="static/images/pause.png" alt="Pause" class="btn-icon" id="pause-resume-icon"> 
+                        <button id="pause-resume-btn" onclick="togglePauseResume()" class="btn btn-warning">
+                            <img id="pause-resume-icon" src="static/images/pause.png" alt="Pause" />
                             <span id="pause-resume-text">Pause</span>
                         </button>
-                        <button onclick="stopCrawl()" class="btn btn-danger" id="stop-btn">
-                            <img src="static/images/stop.png" alt="Stop" class="btn-icon"> Stop
-                        </button>
+                        <button id="stop-btn" onclick="stopCrawl()" class="btn btn-danger">Stop</button>
                     </div>
                 </div>
                 <div class="progress mt-3" style="display: none;" id="progress-container">
