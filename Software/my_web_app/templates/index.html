@@ -40,11 +40,14 @@
                 <div class="crawl-controls">
                     <button onclick="crawlData()" class="btn btn-primary" id="crawl-btn">Crawl Data</button>
                     <div id="control-buttons" style="display: none;">
-                        <button id="pause-resume-btn" onclick="togglePauseResume()" class="btn btn-warning">
-                            <img id="pause-resume-icon" src="static/images/pause.png" alt="Pause" />
+                        <button id="pause-resume-btn" onclick="togglePauseResume()" class="btn btn-warning btn-lg">
+                            <img id="pause-resume-icon" src="static/images/pause.png" alt="Pause" class="btn-icon" />
                             <span id="pause-resume-text">Pause</span>
                         </button>
-                        <button id="stop-btn" onclick="stopCrawl()" class="btn btn-danger">Stop</button>
+                        <button id="stop-btn" onclick="stopCrawl()" class="btn btn-danger btn-lg">
+                            <img src="static/images/stop.png" alt="Stop" class="btn-icon" />
+                            Stop
+                        </button>
                     </div>
                 </div>
                 <div class="progress mt-3" style="display: none;" id="progress-container">

@@ -1,12 +1,30 @@
 let crawlingInProgress = false;
 let isPaused = false;
 let statusCheckInterval = null;
+let stopClicked = false;
 
-function updateButtonStates(isRunning) {
-    document.getElementById('crawl-btn').disabled = isRunning;
-    document.getElementById('control-buttons').style.display = isRunning ? 'flex' : 'none';
-    document.getElementById('pause-resume-btn').disabled = !isRunning;
-    document.getElementById('stop-btn').disabled = !isRunning;
+function updateButtonStates(isRunning, paused = false) {
+    const crawlBtn = document.getElementById('crawl-btn');
+    const controlButtons = document.getElementById('control-buttons');
+    const pauseResumeBtn = document.getElementById('pause-resume-btn');
+    const stopBtn = document.getElementById('stop-btn');
+
+    crawlBtn.disabled = isRunning;
+    
+    controlButtons.style.display = isRunning ? 'flex' : 'none';
+
+    if (isRunning) {
+        pauseResumeBtn.disabled = false;
+        pauseResumeBtn.classList.remove('btn-disabled');
+        
+        stopBtn.disabled = false;
+        stopBtn.classList.remove('btn-disabled');
+    } else {
+        pauseResumeBtn.disabled = true;
+        pauseResumeBtn.classList.add('btn-disabled');
+        stopBtn.disabled = true;
+        stopBtn.classList.add('btn-disabled');
+    }
 }
 
 function updateProgress(progress, currentFile) {
@@ -15,7 +33,7 @@ function updateProgress(progress, currentFile) {
     const statusDiv = document.getElementById('crawl-status');
     
     progressContainer.style.display = 'block';
-    progressBar.style.width = `${progress}%`;
+    progressBar.style.width = `${Math.max(0, Math.min(100, progress))}%`;
     progressBar.textContent = `${Math.round(progress)}%`;
     
     if (currentFile) {
@@ -30,17 +48,28 @@ function updateProgress(progress, currentFile) {
 
 function checkCrawlStatus() {
     fetch('/crawl_status')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => {
+                    throw new Error(data.error || 'Error during data crawling');
+                });
+            }
+            return response.json();
+        })
         .then(status => {
             crawlingInProgress = status.is_running;
             isPaused = status.is_paused;
-            
-            updateButtonStates(crawlingInProgress);
+
+            if (status.error) {
+                throw new Error(status.error);
+            }
+
+            updateButtonStates(crawlingInProgress, isPaused);
             updatePauseResumeButton();
-            
+
             if (crawlingInProgress) {
                 updateProgress(status.progress, status.current_file);
-                
+
                 if (!statusCheckInterval) {
                     statusCheckInterval = setInterval(checkCrawlStatus, 1000);
                 }
@@ -49,12 +78,12 @@ function checkCrawlStatus() {
                     clearInterval(statusCheckInterval);
                     statusCheckInterval = null;
                 }
-                
+
                 document.getElementById('progress-container').style.display = 'none';
-                
+
                 const statusDiv = document.getElementById('crawl-status');
                 if (!status.is_paused) {
-                    statusDiv.innerHTML = 
+                    statusDiv.innerHTML =
                         '<div class="alert alert-success">Crawling completed successfully!</div>';
                     document.getElementById('control-buttons').style.display = 'none';
                 }
@@ -66,11 +95,11 @@ function checkCrawlStatus() {
                 clearInterval(statusCheckInterval);
                 statusCheckInterval = null;
             }
-            
+
             updateButtonStates(false);
             document.getElementById('progress-container').style.display = 'none';
-            document.getElementById('crawl-status').innerHTML = 
-                '<div class="alert alert-danger">Connection lost. Please restart crawling.</div>';
+            document.getElementById('crawl-status').innerHTML =
+                `<div class="alert alert-danger">Error: ${error.message}</div>`;
         });
 }
 
@@ -98,13 +127,16 @@ function togglePauseResume() {
     const action = isPaused ? 'resume_crawl' : 'pause_crawl';
     
     fetch(`/${action}`, { method: 'POST' })
-        .then(response => response.json())
-        .then(data => {
-            if (data.error) {
-                throw new Error(data.error);
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => {
+                    throw new Error(data.error || 'Error during pause/resume');
+                });
             }
-            
-            isPaused = action === 'pause_crawl';
+            return response.json();
+        })
+        .then(data => {
+            isPaused = !isPaused;
             updatePauseResumeButton();
             
             document.getElementById('crawl-status').innerHTML = 
@@ -113,11 +145,15 @@ function togglePauseResume() {
             if (!isPaused && !statusCheckInterval) {
                 statusCheckInterval = setInterval(checkCrawlStatus, 1000);
             }
+            
+            updateButtonStates(true, isPaused);
         })
         .catch(error => {
             console.error('Error:', error);
             document.getElementById('crawl-status').innerHTML = 
                 `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            
+            updateButtonStates(crawlingInProgress, isPaused);
         });
 }
 
@@ -139,14 +175,11 @@ function crawlData() {
     const fileList = filesToDownload.split(',').map(file => file.trim());
     const tagList = tags ? tags.split(',').map(tag => tag.trim()) : [];
 
-    if (crawlingInProgress) {
-        alert('Crawling is already in progress. Please wait.');
-        return;
-    }
+    stopClicked = false;fetch
 
     const statusDiv = document.getElementById('crawl-status');
     statusDiv.innerHTML = '<div class="alert alert-info">Starting crawl process...</div>';
-    
+
     fetch('/crawl', {
         method: 'POST',
         headers: {
@@ -158,17 +191,21 @@ function crawlData() {
             tags: tagList
         })
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            throw new Error(data.error);
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.error || 'Error during data crawling');
+            });
         }
+        return response.json();
+    })
+    .then(data => {
         statusDiv.innerHTML = '<div class="alert alert-info">Data crawling started...</div>';
         crawlingInProgress = true;
         isPaused = false;
         updateButtonStates(true);
         updatePauseResumeButton();
-        
+
         if (statusCheckInterval) {
             clearInterval(statusCheckInterval);
         }
@@ -177,11 +214,18 @@ function crawlData() {
     .catch(error => {
         statusDiv.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
         console.error('Error:', error);
+        crawlingInProgress = false;
+        updateButtonStates(false);
     });
 }
 
 function stopCrawl() {
+    if (stopClicked) return;
+    
+    stopClicked = true;
+
     if (!confirm('Are you sure you want to stop the crawling process? This cannot be undone.')) {
+        stopClicked = false;
         return;
     }
 
@@ -191,6 +235,7 @@ function stopCrawl() {
             if (data.error) {
                 throw new Error(data.error);
             }
+            
             document.getElementById('crawl-status').innerHTML = 
                 '<div class="alert alert-info">Crawling stopped</div>';
             crawlingInProgress = false;
@@ -211,8 +256,6 @@ function stopCrawl() {
                 `<div class="alert alert-danger">Error: ${error.message}</div>`;
         });
 }
-
-let analysisInProgress = false;
 
 function uploadDatasets() {
     const file1 = document.getElementById('datasetInput1').files[0];

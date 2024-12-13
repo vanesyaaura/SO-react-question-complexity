@@ -74,11 +74,22 @@ h2 {
     gap: 1rem;
 }
 
+.btn-lg {
+    padding: 0.5rem 2rem;
+    font-size: 1.2rem;
+}
+
 .btn-icon {
-    width: 16px;
-    height: 16px;
-    margin-right: 5px;
+    width: 20px;
+    height: 20px;
+    margin-right: 0.5rem;
     vertical-align: middle;
+}
+
+.btn-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
 }
 
 .progress {

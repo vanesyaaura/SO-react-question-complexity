@@ -26,6 +26,7 @@ from sklearn.preprocessing import StandardScaler
 from imblearn.over_sampling import SMOTE
 import seaborn as sns
 import concurrent.futures
+import validators
 
 app = Flask(__name__)
 
@@ -35,7 +36,8 @@ crawl_status = {
     'progress': 0,
     'current_file': '',
     'total_size': 0,
-    'downloaded_size': 0
+    'downloaded_size': 0,
+    'last_error': None
 }
 crawl_lock = threading.Lock()
 
@@ -108,7 +110,7 @@ def home():
 
 def async_crawl(base_url, files_to_download, tags):
     global crawl_status
-    
+    print(f"async -> {base_url} - {files_to_download}")
     try:
         os.makedirs('data/extracted', exist_ok=True)
         
@@ -148,27 +150,71 @@ def async_crawl(base_url, files_to_download, tags):
 @app.route('/crawl', methods=['POST'])
 def crawl():
     data = request.json
-    base_url = data.get('base_url')
-    files_to_download = data.get('files_to_download')
+    base_url = data.get('base_url', '').strip()
+    files_to_download = data.get('files_to_download', [])
     tags = data.get('tags', [])
+    
+    is_valid, error_msg = validate_crawl_input(base_url, files_to_download, tags)
+    if not is_valid:
+        return jsonify({"error": error_msg}), 400
+
     if isinstance(tags, str):
         tags = [tag.strip() for tag in tags.split(',')]
 
-    if not base_url or not files_to_download:
-        return jsonify({"error": "Base URL and files to download are required"}), 400
-
-    try:
+    def gen():
+        crawl_status['last_error'] = None
         os.makedirs('data', exist_ok=True)
-        logistic_path, linear_path = generate_datasets(base_url, files_to_download, tags)
-        return jsonify({
-            "message": "Data crawling completed",
-            "logistic_regression_dataset": logistic_path,
-            "linear_regression_dataset": linear_path
-        })
+        try:
+            logistic_path, linear_path = generate_datasets(base_url, files_to_download, tags)
+            return jsonify({
+                "message": "Data crawling completed",
+                "logistic_regression_dataset": logistic_path,
+                "linear_regression_dataset": linear_path
+            })
+        except Exception as e:
+            crawl_status['last_error'] = str(e)
+            return jsonify({"error": str(e)}), 500
+    
+    try:
+        if crawl_status['is_running']:
+            return jsonify({"error": "Crawling already in progress"}), 400
+        
+        crawl_status['is_running'] = True
+        crawl_status['is_paused'] = False
+        executor.submit(gen)
+        return jsonify({"message": "Data crawling started"})
+        
     except Exception as e:
+        crawl_status['is_running'] = False
         return jsonify({"error": str(e)}), 500
 
+def validate_crawl_input(base_url, files_to_download, tags):
+    """Validate crawl input parameters"""
+    if not validators.url(base_url):
+        return False, "Invalid base URL format"
+    
+    if not files_to_download or not isinstance(files_to_download, list):
+        return False, "Files to download must be a non-empty list"
+    
+    for file in files_to_download:
+        if not file.endswith('.7z'):
+            return False, f"Invalid file format for {file}. Only .7z files are supported"
+    
+    if tags and not isinstance(tags, list):
+        return False, "Tags must be a list"
+    
+    return True, None
+
+
 def process_data(base_url, files_to_download, tags):
+    for filename in os.listdir('data/extracted'):
+        file_path = os.path.join('data/extracted', filename)
+        try:
+            if os.path.isfile(file_path):
+                os.unlink(file_path)
+        except Exception as e:
+            print(f"Error clearing previous data: {e}")
+    
     os.makedirs('data/extracted', exist_ok=True)
     
     crawl_status['is_running'] = True
@@ -290,7 +336,10 @@ def stop_crawl():
 @app.route('/crawl_status', methods=['GET'])
 def get_crawl_status():
     with crawl_lock:
-        return jsonify(crawl_status)
+        status_copy = crawl_status.copy()
+        if status_copy['last_error']:
+            status_copy['error'] = status_copy['last_error']
+        return jsonify(status_copy)
 
 @app.route('/upload_dataset', methods=['POST'])
 def upload_dataset():
