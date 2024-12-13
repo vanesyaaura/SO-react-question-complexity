@@ -37,9 +37,13 @@ crawl_status = {
     'current_file': '',
     'total_size': 0,
     'downloaded_size': 0,
-    'last_error': None
+    'last_error': None,
+    'crawl_thread': None
 }
+
 crawl_lock = threading.Lock()
+crawling_event = threading.Event()
+crawling_event.set()
 
 try:
     nltk.data.find('tokenizers/punkt')
@@ -50,22 +54,71 @@ except LookupError:
     nltk.download('stopwords')
     nltk.download('wordnet')
 
-def create_linear_regression_plot(X, y, X_train, y_train, regressor):
-    plt.figure(figsize=(10, 6))
-    plt.scatter(X, y, color='lightcoral')
-    plt.plot(X_train, regressor.predict(X_train), color='firebrick')
-    plt.title('Reputation vs pd_score')
-    plt.xlabel('Reputation')
-    plt.ylabel('pd_score')
-    plt.box(False)
-    
-    buf = BytesIO()
-    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-    plt.close()
-    
-    buf.seek(0)
-    image_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
-    return f'data:image/png;base64,{image_base64}'
+@app.route('/')
+def home():
+    return render_template('index.html')
+
+
+@app.route('/crawl', methods=['POST'])
+def crawl():
+    data = request.json
+    base_url = data.get('base_url', '').strip()
+    files_to_download = data.get('files_to_download', [])
+    tags = data.get('tags', [])
+
+    is_valid, error_msg = validate_crawl_input(base_url, files_to_download, tags)
+    if not is_valid:
+        return jsonify({"error": error_msg}), 400
+
+    if isinstance(tags, str):
+        tags = [tag.strip() for tag in tags.split(',')]
+
+    def gen():
+        crawl_status['last_error'] = None
+        os.makedirs('data', exist_ok=True)
+        try:
+            for file in files_to_download:
+                while crawl_status['is_paused']:
+                    time.sleep(1)
+                    if not crawl_status['is_running']:
+                        return
+                
+                if not crawl_status['is_running']:
+                    return
+                
+                crawl_status['current_file'] = file
+                crawl_status['progress'] += 1 / len(files_to_download) * 100
+                time.sleep(1)
+
+            logistic_path, linear_path = generate_datasets(base_url, files_to_download, tags)
+            crawl_status['is_running'] = False
+            crawl_status['is_paused'] = False
+            return jsonify({
+                "message": "Data crawling completed",
+                "logistic_regression_dataset": logistic_path,
+                "linear_regression_dataset": linear_path
+            })
+        except Exception as e:
+            crawl_status['last_error'] = str(e)
+            crawl_status['is_running'] = False
+            return jsonify({"error": str(e)}), 500
+
+    try:
+        if crawl_status['is_running']:
+            return jsonify({"error": "Crawling already in progress"}), 400
+
+        crawl_status['is_running'] = True
+        crawl_status['is_paused'] = False
+        crawl_status['progress'] = 0
+        
+        crawl_thread = threading.Thread(target=gen, daemon=True)
+        crawl_status['crawl_thread'] = crawl_thread.ident
+        crawl_thread.start()
+
+        return jsonify({"message": "Data crawling started"})
+    except Exception as e:
+        crawl_status['is_running'] = False
+        return jsonify({"error": str(e)}), 500
 
 def get_file_size(url):
     try:
@@ -101,12 +154,6 @@ def download_file(url, file_path):
     except Exception as e:
         print(f"Download error: {e}")
         return False
-
-executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-
-@app.route('/')
-def home():
-    return render_template('index.html')
 
 def async_crawl(base_url, files_to_download, tags):
     global crawl_status
@@ -146,47 +193,6 @@ def async_crawl(base_url, files_to_download, tags):
             crawl_status['is_paused'] = False
             crawl_status['current_file'] = ''
             crawl_status['progress'] = 0
-
-@app.route('/crawl', methods=['POST'])
-def crawl():
-    data = request.json
-    base_url = data.get('base_url', '').strip()
-    files_to_download = data.get('files_to_download', [])
-    tags = data.get('tags', [])
-    
-    is_valid, error_msg = validate_crawl_input(base_url, files_to_download, tags)
-    if not is_valid:
-        return jsonify({"error": error_msg}), 400
-
-    if isinstance(tags, str):
-        tags = [tag.strip() for tag in tags.split(',')]
-
-    def gen():
-        crawl_status['last_error'] = None
-        os.makedirs('data', exist_ok=True)
-        try:
-            logistic_path, linear_path = generate_datasets(base_url, files_to_download, tags)
-            return jsonify({
-                "message": "Data crawling completed",
-                "logistic_regression_dataset": logistic_path,
-                "linear_regression_dataset": linear_path
-            })
-        except Exception as e:
-            crawl_status['last_error'] = str(e)
-            return jsonify({"error": str(e)}), 500
-    
-    try:
-        if crawl_status['is_running']:
-            return jsonify({"error": "Crawling already in progress"}), 400
-        
-        crawl_status['is_running'] = True
-        crawl_status['is_paused'] = False
-        executor.submit(gen)
-        return jsonify({"message": "Data crawling started"})
-        
-    except Exception as e:
-        crawl_status['is_running'] = False
-        return jsonify({"error": str(e)}), 500
 
 def validate_crawl_input(base_url, files_to_download, tags):
     """Validate crawl input parameters"""
@@ -273,7 +279,7 @@ def process_data(base_url, files_to_download, tags):
     return merged_df
 
 def generate_datasets(base_url, files_to_download, tags):
-    os.makedirs('data/stackoverflow', exist_ok=True)
+    os.makedirs('./data/stackoverflow', exist_ok=True)
 
     merged_df = process_data(base_url, files_to_download, tags)
 
@@ -294,44 +300,55 @@ def generate_datasets(base_url, files_to_download, tags):
 @app.route('/pause_crawl', methods=['POST'])
 def pause_crawl():
     global crawl_status
-    with crawl_lock:
-        if crawl_status['is_running']:
-            crawl_status['is_paused'] = True
-            return jsonify({
-                "message": "Crawling paused", 
-                "status": {
-                    "is_paused": True, 
-                    "current_file": crawl_status['current_file'], 
-                    "progress": crawl_status['progress']
-                }
-            })
+    if crawl_status['is_running']:
+        crawling_event.clear()
+        crawl_status['is_paused'] = True
+        return jsonify({
+            "message": "Crawling paused",
+            "status": {
+                "is_paused": True,
+                "current_file": crawl_status['current_file'],
+                "progress": crawl_status['progress']
+            }
+        })
     return jsonify({"error": "No crawling in progress"}), 400
+
 
 @app.route('/resume_crawl', methods=['POST'])
 def resume_crawl():
     global crawl_status
-    with crawl_lock:
-        if crawl_status['is_running'] and crawl_status['is_paused']:
-            crawl_status['is_paused'] = False
-            return jsonify({
-                "message": "Crawling resumed", 
-                "status": {
-                    "is_paused": False, 
-                    "current_file": crawl_status['current_file'], 
-                    "progress": crawl_status['progress']
-                }
-            })
+    if crawl_status['is_running'] and crawl_status['is_paused']:
+        crawling_event.set()
+        crawl_status['is_paused'] = False
+        return jsonify({
+            "message": "Crawling resumed",
+            "status": {
+                "is_paused": False,
+                "current_file": crawl_status['current_file'],
+                "progress": crawl_status['progress']
+            }
+        })
     return jsonify({"error": "No paused crawling in progress"}), 400
+
 
 @app.route('/stop_crawl', methods=['POST'])
 def stop_crawl():
     global crawl_status
-    with crawl_lock:
-        if crawl_status['is_running']:
-            crawl_status['is_running'] = False
-            crawl_status['is_paused'] = False
-            return jsonify({"message": "Crawling stopped"})
+    if crawl_status['is_running']:
+        crawl_status['is_running'] = False
+        crawl_status['is_paused'] = False
+        crawling_event.set()
+
+        crawl_thread = crawl_status['crawl_thread']
+        if crawl_thread and crawl_thread.is_alive():
+            crawl_thread.join(timeout=10)
+
+            if crawl_thread.is_alive():
+                return jsonify({"error": "Failed to stop crawling within the timeout period"}), 500
+
+        return jsonify({"message": "Crawling stopped"})
     return jsonify({"error": "No crawling in progress"}), 400
+
 
 @app.route('/crawl_status', methods=['GET'])
 def get_crawl_status():
@@ -473,6 +490,24 @@ def analyze():
             return jsonify({"error": str(e)}), 500
 
     return jsonify({"message": "Invalid analysis type."}), 400
+
+def create_linear_regression_plot(X, y, X_train, y_train, regressor):
+    plt.figure(figsize=(10, 6))
+    plt.scatter(X, y, color='lightcoral')
+    plt.plot(X_train, regressor.predict(X_train), color='firebrick')
+    plt.title('Reputation vs pd_score')
+    plt.xlabel('Reputation')
+    plt.ylabel('pd_score')
+    plt.box(False)
+    
+    buf = BytesIO()
+    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    buf.seek(0)
+    image_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+    return f'data:image/png;base64,{image_base64}'
+
 
 if __name__ == '__main__':
     app.run(debug=True, threaded=True)
