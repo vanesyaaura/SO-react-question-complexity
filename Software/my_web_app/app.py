@@ -101,7 +101,6 @@ def crawl():
         except Exception as e:
             crawl_status['last_error'] = str(e)
             crawl_status['is_running'] = False
-            return jsonify({"error": str(e)}), 500
 
     try:
         if crawl_status['is_running']:
