@@ -2,6 +2,7 @@ let crawlingInProgress = false;
 let isPaused = false;
 let statusCheckInterval = null;
 let stopClicked = false;
+let analysisInProgress = false;
 
 function updateButtonStates(isRunning, paused = false) {
     const crawlBtn = document.getElementById('crawl-btn');
