@@ -8,7 +8,7 @@ This is a research artefact for the paper: **Exploring React Library Related Que
 ## Contents:
 * [Data Analysis](https://github.com/vanesyaaura/SO-react-question-complexity/tree/main/Data%20Analysis): source code for the analysis in this study.
 * [Dataset](https://github.com/vanesyaaura/SO-react-question-complexity/tree/main/Dataset):
-  * `RQ1_Labeled_ReactDataset_for_LogisticRegression.csv` -
+  * `RQ1_Labeled_ReactDataset_for_LogisticRegression.zip` -
   * `RQ2_Reputation_vs_PDScore_LinearRegression.csv` - 
 
 ## Authors:
